@@ -52,7 +52,7 @@ const Login = () => {
    
    // Use ID Token request instead of regular auth request
    const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-     clientId: googleWebClientId,
+     webClientId: googleWebClientId,
      androidClientId: googleAndroidClientId,
    });
    
