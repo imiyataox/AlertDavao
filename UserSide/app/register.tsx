@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { View, Text, Button, TextInput, ScrollView, TouchableOpacity, Alert } from "react-native";
 import Checkbox from "expo-checkbox";
 import PhoneInput from "react-native-phone-number-input";
-import { Recaptcha, RecaptchaHandles } from "react-native-recaptcha-that-works";
+import Recaptcha, { RecaptchaRef } from "react-native-recaptcha-that-works";
 import { OtpInput } from "react-native-otp-entry";
 import styles from "./(tabs)/styles";
 import { useRouter } from 'expo-router';
@@ -25,7 +25,7 @@ const Register = () => {
   const { showLoading, hideLoading } = useLoading();
   const router = useRouter();
   const phoneInputRef = useRef(null);
-  const recaptchaRef = useRef<RecaptchaHandles>(null);
+  const recaptchaRef = useRef<RecaptchaRef>(null);
   
   const RECAPTCHA_SITE_KEY = "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"; // Test key - replace with your actual key
 
