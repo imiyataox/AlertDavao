@@ -159,6 +159,7 @@ app.get("/api/verify-email", verifyEmail); // Email verification endpoint
 app.post("/login", handleLogin);
 app.post("/google-login", handleGoogleLogin); // Google Sign-In
 app.post("/google-login-token", handleGoogleLoginWithToken); // Google Sign-In with ID token verification (more secure)
+app.post("/api/auth/google", handleGoogleLoginWithToken); // Recommended endpoint for token-only flow
 
 // User Profile API Routes
 app.get("/api/test-connection", testConnection);

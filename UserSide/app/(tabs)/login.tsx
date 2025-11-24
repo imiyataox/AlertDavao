@@ -42,7 +42,7 @@ const Login = () => {
      setIsLoading(false);
    }, []);
    
-   // Google Sign-In configuration
+   // Google Sign-In configuration - Using ID Token flow (token-only, no redirects)
    const googleWebClientId = Constants.expoConfig?.extra?.googleWebClientId || '';
    const googleAndroidClientId = Constants.expoConfig?.extra?.googleAndroidClientId || '';
    
@@ -50,10 +50,10 @@ const Login = () => {
    console.log('🔑 Google Web Client ID:', googleWebClientId);
    console.log('🔑 Google Android Client ID:', googleAndroidClientId);
    
-   const [request, response, promptAsync] = Google.useAuthRequest({
-     webClientId: googleWebClientId,
+   // Use ID Token request instead of regular auth request
+   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+     clientId: googleWebClientId,
      androidClientId: googleAndroidClientId,
-     scopes: ['profile', 'email'],
    });
    
    // Log every time response changes
@@ -149,19 +149,21 @@ const Login = () => {
     router.push("/register");
   };
 
-  // Handle Google Sign-In response
+  // Handle Google Sign-In response - Using ID Token flow
   useEffect(() => {
     console.log('🔍 OAuth response changed:', response);
     
     if (response?.type === 'success') {
       console.log('✅ OAuth success! Response:', JSON.stringify(response, null, 2));
-      const { authentication } = response;
+      const { params } = response;
       
-      if (authentication?.accessToken) {
-        console.log('🎫 Got access token, fetching user info...');
-        handleGoogleSignIn(authentication.accessToken);
+      // With useIdTokenAuthRequest, we get the ID token directly in params
+      if (params?.id_token) {
+        console.log('🎫 Got ID token, sending to backend...');
+        handleGoogleSignInWithToken(params.id_token);
       } else {
-        console.log('⚠️ No access token in response');
+        console.log('⚠️ No ID token in response');
+        Alert.alert('Sign In Failed', 'Could not retrieve Google ID token');
       }
     } else if (response?.type === 'error') {
       console.log('❌ OAuth error:', response.error);
@@ -171,34 +173,20 @@ const Login = () => {
     }
   }, [response]);
 
-  const handleGoogleSignIn = async (accessToken: string) => {
+  const handleGoogleSignInWithToken = async (idToken: string) => {
     setIsLoading(true);
     try {
-      // Get user info from Google
-      const userInfoResponse = await fetch(
-        'https://www.googleapis.com/userinfo/v2/me',
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
-      const googleUser = await userInfoResponse.json();
-
-      console.log('Google user info:', googleUser);
-
-      // Send to backend for authentication/registration
-      const response = await fetch(`${BASE_URL}/google-login`, {
+      console.log('📤 Sending ID token to backend...');
+      
+      // Send ID token directly to backend for verification
+      const response = await fetch(`${BASE_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          googleId: googleUser.id,
-          email: googleUser.email,
-          firstName: googleUser.given_name || '',
-          lastName: googleUser.family_name || '',
-          profilePicture: googleUser.picture,
-        }),
+        body: JSON.stringify({ idToken }),
       });
 
       const data = await response.json();
+      console.log('📥 Backend response:', data);
 
       if (response.ok) {
         const user = data.user || data;
@@ -213,9 +201,22 @@ const Login = () => {
           return;
         }
 
-        // Store user data
+        // Store user data in AsyncStorage
         await AsyncStorage.setItem('userData', JSON.stringify(user));
-        console.log('Google Sign-In successful');
+        console.log('✅ Google Sign-In successful');
+
+        // Update UserContext
+        setUser({
+          id: user.id?.toString() || '0',
+          firstName: user.firstname || user.firstName || '',
+          lastName: user.lastname || user.lastName || '',
+          email: user.email || '',
+          phone: user.contact || user.phone || '',
+          address: user.address || '',
+          isVerified: Boolean(user.is_verified || user.isVerified),
+          profileImage: user.profile_image || user.profileImage || user.profile_picture,
+        });
+        console.log('✅ UserContext updated after Google Sign-In');
 
         // Navigate to main app
         router.replace('/(tabs)');
@@ -224,7 +225,7 @@ const Login = () => {
         setIsLoading(false);
       }
     } catch (error) {
-      console.error('Google Sign-In error:', error);
+      console.error('❌ Google Sign-In error:', error);
       Alert.alert(
         'Sign In Error',
         'Failed to sign in with Google. Please try again.'
