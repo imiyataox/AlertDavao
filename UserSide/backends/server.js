@@ -59,6 +59,7 @@ const handleRegister = require("./handleRegister");
 const { handleRegisterWithVerification, verifyEmail } = require("./handleEmailVerification");
 const { handleGoogleLogin, handleGoogleLoginWithToken } = require("./handleGoogleAuth");
 const handleLogin = require("./handleLogin");
+const { sendOTP, verifyOTP, sendLoginOTP, verifyLoginOTP } = require("./handleOTP");
 const {
   testConnection,
   getUserById,
@@ -159,6 +160,13 @@ app.get("/api/verify-email", verifyEmail); // Email verification endpoint
 app.post("/login", handleLogin);
 app.post("/google-login", handleGoogleLogin); // Google Sign-In
 app.post("/google-login-token", handleGoogleLoginWithToken); // Google Sign-In with ID token verification (more secure)
+app.post("/api/auth/google", handleGoogleLoginWithToken); // Recommended endpoint for token-only flow
+
+// OTP Routes
+app.post("/api/otp/send", sendOTP); // Send OTP for registration
+app.post("/api/otp/verify", verifyOTP); // Verify OTP for registration
+app.post("/api/otp/login/send", sendLoginOTP); // Send OTP for login
+app.post("/api/otp/login/verify", verifyLoginOTP); // Verify OTP for login
 
 // User Profile API Routes
 app.get("/api/test-connection", testConnection);
