@@ -8,6 +8,7 @@ import {
   ScrollView,
   Platform,
   Alert,
+  TouchableOpacity,
 } from "react-native";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from "expo-router";
@@ -15,6 +16,7 @@ import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import { useUser } from '../../contexts/UserContext';
+import { OtpInput } from "react-native-otp-entry";
 
 import styles from "./styles";
 
@@ -33,6 +35,9 @@ const Login = () => {
    const [password, setPassword] = useState("");
    const [showPassword, setShowPassword] = useState(false);
    const [isLoading, setIsLoading] = useState(false);
+   const [showOTPModal, setShowOTPModal] = useState(false);
+   const [otp, setOtp] = useState("");
+   const [pendingUserData, setPendingUserData] = useState(null);
 
    const router = useRouter();
    const { setUser } = useUser();
@@ -90,7 +95,7 @@ const Login = () => {
       console.log('📥 Response data:', data);
 
       if (response.ok) {
-         console.log("✅ Login successful:", data);
+         console.log("✅ Login credentials verified:", data);
          
          const user = data.user || data;
          
@@ -102,29 +107,11 @@ const Login = () => {
            return;
          }
          
-         // Store user data in AsyncStorage
-         try {
-           await AsyncStorage.setItem('userData', JSON.stringify(user));
-           console.log('User data stored successfully');
-           
-           // Immediately update UserContext
-           setUser({
-             id: user.id?.toString() || '0',
-             firstName: user.firstname || user.firstName || '',
-             lastName: user.lastname || user.lastName || '',
-             email: user.email || '',
-             phone: user.contact || user.phone || '',
-             address: user.address || '',
-             isVerified: Boolean(user.is_verified || user.isVerified),
-             profileImage: user.profile_image || user.profileImage,
-           });
-           console.log('✅ UserContext updated immediately after login');
-         } catch (storageError) {
-           console.error('Error storing user data:', storageError);
-         }
+         // Store user data temporarily
+         setPendingUserData(user);
          
-         // Regular users go to the Tabs group root (index tab)
-         router.replace("/(tabs)");
+         // Send OTP to user's phone
+         await sendLoginOTP();
        } else {
          alert(data.message || "Login failed");
          setIsLoading(false);
@@ -134,6 +121,92 @@ const Login = () => {
       console.error("Error message:", err.message);
       console.error("Error stack:", err.stack);
       alert("Network error: " + (err.message || "Unknown"));
+      setIsLoading(false);
+    }
+  };
+
+  const sendLoginOTP = async () => {
+    try {
+      console.log('📱 Sending login OTP...');
+      const response = await fetch(`${BASE_URL}/api/otp/login/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+      console.log('📥 OTP send response:', data);
+
+      if (response.ok) {
+        setShowOTPModal(true);
+        setIsLoading(false);
+        Alert.alert(
+          "OTP Sent",
+          `A verification code has been sent to ${data.phoneNumber}${data.devOTP ? `\n\nDev OTP: ${data.devOTP}` : ''}`
+        );
+      } else {
+        Alert.alert("Error", data.message || "Failed to send OTP");
+        setIsLoading(false);
+      }
+    } catch (err: any) {
+      console.error("❌ Error sending OTP:", err);
+      Alert.alert("Error", "Failed to send OTP. Please try again.");
+      setIsLoading(false);
+    }
+  };
+
+  const verifyLoginOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      Alert.alert("Invalid OTP", "Please enter the 6-digit OTP code.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${BASE_URL}/api/otp/login/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // OTP verified, complete login
+        const user = pendingUserData;
+        
+        // Store user data in AsyncStorage
+        try {
+          await AsyncStorage.setItem('userData', JSON.stringify(user));
+          console.log('User data stored successfully');
+          
+          // Update UserContext
+          setUser({
+            id: user.id?.toString() || '0',
+            firstName: user.firstname || user.firstName || '',
+            lastName: user.lastname || user.lastName || '',
+            email: user.email || '',
+            phone: user.contact || user.phone || '',
+            address: user.address || '',
+            isVerified: Boolean(user.is_verified || user.isVerified),
+            profileImage: user.profile_image || user.profileImage,
+          });
+          console.log('✅ UserContext updated after OTP verification');
+        } catch (storageError) {
+          console.error('Error storing user data:', storageError);
+        }
+        
+        setShowOTPModal(false);
+        setIsLoading(false);
+        // Regular users go to the Tabs group root (index tab)
+        router.replace("/(tabs)");
+      } else {
+        Alert.alert("OTP Verification Failed", data.message || "Incorrect OTP");
+        setIsLoading(false);
+      }
+    } catch (err: any) {
+      console.error("❌ Error verifying OTP:", err);
+      Alert.alert("Error", "Failed to verify OTP. Please try again.");
       setIsLoading(false);
     }
   };
@@ -343,6 +416,90 @@ const Login = () => {
           </Text>
         </Pressable>
       </View>
+      {/* OTP Modal */}
+      {showOTPModal && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 10,
+            padding: 20,
+            width: '90%',
+            maxWidth: 400,
+          }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' }}>
+              Enter Verification Code
+            </Text>
+            <Text style={{ fontSize: 14, color: '#666', marginBottom: 20, textAlign: 'center' }}>
+              We've sent a 6-digit code to your registered phone number
+            </Text>
+            
+            <OtpInput
+              numberOfDigits={6}
+              onTextChange={setOtp}
+              focusColor="#1D3557"
+              theme={{
+                containerStyle: { marginBottom: 20 },
+                pinCodeContainerStyle: {
+                  borderColor: '#1D3557',
+                  borderWidth: 2,
+                  borderRadius: 8,
+                },
+              }}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: '#ccc',
+                  padding: 12,
+                  borderRadius: 5,
+                  alignItems: 'center',
+                }}
+                onPress={() => {
+                  setShowOTPModal(false);
+                  setIsLoading(false);
+                }}
+              >
+                <Text style={{ color: '#333', fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: '#1D3557',
+                  padding: 12,
+                  borderRadius: 5,
+                  alignItems: 'center',
+                }}
+                onPress={verifyLoginOTP}
+                disabled={isLoading}
+              >
+                <Text style={{ color: 'white', fontWeight: '600' }}>
+                  {isLoading ? 'Verifying...' : 'Verify'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={{ marginTop: 15, alignItems: 'center' }}
+              onPress={sendLoginOTP}
+            >
+              <Text style={{ color: '#1D3557', textDecorationLine: 'underline' }}>
+                Resend Code
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 };
